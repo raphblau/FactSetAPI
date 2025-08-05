@@ -3,6 +3,7 @@ from typing import Dict
 from global_prices import PriceDataLoader
 from fundamentals import FundamentalDataLoader
 from metadata import MetaDataJoiner
+from estimates import EstimatesLoader
 from core import create_connection
 
 
@@ -16,6 +17,30 @@ class DataOrchestrator:
         self.meta = MetaDataJoiner(conn)
         self.prices_loader = PriceDataLoader(conn)
         self.fund_loader = FundamentalDataLoader(conn)
+        self.estiates_loader = EstimatesLoader(conn)
+
+    def load_estimates(
+        self,
+        tables: list[str],
+        fe_items: list[str],
+        start: str,
+        end: str,
+        frequency: str = "qf"
+    ) -> dict[str, pl.DataFrame]:
+
+        result = {}
+
+        for table_type in tables:
+            df = self.estimates_loader.load(
+                table_type=table_type,
+                fe_items=fe_items,
+                start=start,
+                end=end,
+                frequency=frequency
+            )
+            result[table_type] = df
+
+        return result
 
     def load(
         self,
