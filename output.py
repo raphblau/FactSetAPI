@@ -15,6 +15,24 @@ class PanelOutput:
         self.frames = frames
 
     def get(self, key: str) -> pl.DataFrame:
+        """
+        Retrieve a specific DataFrame by its key (e.g., "prices", "fundamentals").
+
+        Parameters
+        ----------
+        key : str
+            The key corresponding to the desired DataFrame.
+
+        Returns
+        -------
+        pl.DataFrame
+            The requested DataFrame, or an empty one if the key is not found.
+
+        Examples
+        --------
+        >>> df_prices = po.get("prices")
+        >>> print(df_prices.columns)
+        """
         return self.frames.get(key, pl.DataFrame())
 
     def filter(
@@ -24,7 +42,26 @@ class PanelOutput:
         end_date: Optional[str] = None
     ) -> 'PanelOutput':
         """
-        Filter all DataFrames by ISIN and date range.
+        Filter all contained DataFrames by ISIN and/or date range.
+
+        Parameters
+        ----------
+        isins : str or list[str], optional
+            One or multiple ISINs to keep. If None, no ISIN filtering is applied.
+        start_date : str, optional
+            Minimum date (inclusive) in 'YYYY-MM-DD' format.
+        end_date : str, optional
+            Maximum date (inclusive) in 'YYYY-MM-DD' format.
+
+        Returns
+        -------
+        PanelOutput
+            A new PanelOutput instance with filtered DataFrames.
+
+        Examples
+        --------
+        >>> filtered_po = po.filter(isins="US0378331005", start_date="2022-01-01", end_date="2022-12-31")
+        >>> print(filtered_po.get("prices").shape)
         """
         new_frames = {}
         for key, df in self.frames.items():
@@ -47,21 +84,63 @@ class PanelOutput:
         entity: str = "ISIN"
     ) -> pl.DataFrame:
         """
-        Pivot a feature from a source (e.g., 'prices') to [date x ISIN] format.
+        Pivot a single feature column into a wide matrix format.
+
+        Parameters
+        ----------
+        source : str
+            The key of the DataFrame to use (e.g., 'prices').
+        feature : str
+            The name of the feature column to pivot.
+        index : str, default="date"
+            The column to use as row index (typically 'date').
+        entity : str, default="ISIN"
+            The column to use as columns in the pivoted matrix.
+
+        Returns
+        -------
+        pl.DataFrame
+            A pivoted DataFrame with rows as dates and columns as ISINs (or other entities).
+            If the feature is not found, an empty DataFrame is returned.
+
+        Examples
+        --------
+        >>> matrix = po.to_matrix(source="prices", feature="price")
+        >>> print(matrix.head())
         """
         df = self.get(source)
         if df.is_empty() or feature not in df.columns:
             return pl.DataFrame()
         return df.select([index, entity, feature]).pivot(index=index, columns=entity, values=feature)
 
-    def to_feature_matrices(
+    def to_matrices(
         self,
         source: str,
         index: str = "date",
         entity: str = "ISIN"
     ) -> Dict[str, pl.DataFrame]:
         """
-        Return all [index x entity] feature matrices from a given source.
+        Convert all features from a given source into separate pivoted matrices.
+
+        Parameters
+        ----------
+        source : str
+            The key of the DataFrame to use (e.g., 'prices', 'fundamentals').
+        index : str, default="date"
+            The column to use as row index in each matrix.
+        entity : str, default="ISIN"
+            The column to use as column headers in each matrix.
+
+        Returns
+        -------
+        Dict[str, pl.DataFrame]
+            A dictionary where each key is a feature name, and each value is a pivoted DataFrame.
+
+        Examples
+        --------
+        >>> matrices = po.to_matrices("prices")
+        >>> for name, df in matrices.items():
+        ...     print(f"{name} matrix shape: {df.shape}")
         """
         df = self.get(source)
         base_cols = {index, entity}

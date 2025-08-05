@@ -26,7 +26,55 @@ class PriceDataLoader:
     
     
     def get_prices(self, isins: list[str], start_date: str, end_date: str, fields: list[str] = ['price', 'volume'], adjust:bool = True) -> pl.DataFrame:
+        """
+        Retrieve raw or adjusted price data for a list of ISINs over a specified date range.
 
+        Parameters
+        ----------
+        isins : list[str]
+            List of ISINs for which price data should be retrieved.
+            These ISINs are mapped internally to FactSet regional security identifiers (fsym_regional_id).
+
+        start_date : str
+            The start date of the price time series in 'YYYY-MM-DD' format.
+
+        end_date : str
+            The end date of the price time series in 'YYYY-MM-DD' format.
+
+        fields : list[str], default=['price', 'volume']
+            List of price-related columns to retrieve from the price table.
+            These may include fields such as 'price', 'price_open', 'volume', etc.
+            Invalid or unavailable fields will be ignored with a warning.
+
+        adjust : bool, default=True
+            Whether to return adjusted values for price-related fields using corporate action adjustment factors.
+            If False, adjustment factors are set to 1.0 and raw (unadjusted) values are returned.
+
+        Returns
+        -------
+        pl.DataFrame
+            A Polars DataFrame with the requested price data, including:
+                - 'price_date'
+                - 'ISIN'
+                - Non-adjustable fields
+                - Adjustable fields
+                - Adjusted columns named '{field}_adj' if `adjust=True`
+
+        Examples
+        --------
+        >>> loader = PriceDataLoader(conn)
+        >>> df = loader.get_prices(
+        ...     isins=["US0378331005", "FR0000120271"],
+        ...     start_date="2021-01-01",
+        ...     end_date="2021-12-31",
+        ...     fields=["price", "volume", "currency"],
+        ...     adjust=True
+        ... )
+        >>> print(df.head())
+
+        This will return daily adjusted and unadjusted price and volume data,
+        along with the currency, for Apple and TotalEnergies during 2021.
+        """
         df_isin_map = SharedUtils.get_isin_map(isins,self.conn)
         fsym_ids = df_isin_map['fsym_regional_id'].unique().tolist()
 

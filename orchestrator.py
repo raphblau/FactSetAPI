@@ -25,6 +25,8 @@ class DataOrchestrator:
         price_fields: list[str] = None,
         fund_fields: list[str] = None,
         adjust: bool = True,
+        frequency: str ="qf",
+        fallback: bool = False
     ) -> dict[str, pl.DataFrame]:
         df_price = (
             self.prices_loader.get_prices(isins, start, end, price_fields, adjust)
@@ -33,7 +35,7 @@ class DataOrchestrator:
         )
 
         if fund_fields:
-            result = self.fund_loader.get_fundamentals(isins, start, end, fund_fields)
+            result = self.fund_loader.get_fundamentals(isins, start, end, fund_fields, frequency, fallback)
             df_fund_list = result['dataframes']
             if df_fund_list:
 
@@ -52,7 +54,7 @@ class DataOrchestrator:
         else:
             df_fund_all = pl.DataFrame([])
 
-        df_price_all = df_price
+        df_price_all = df_price.rename({"price_date":"date"})
 
         return {"prices": df_price_all, "fundamentals": df_fund_all}
 

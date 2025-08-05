@@ -8,19 +8,34 @@ class FundamentalDataLoader:
     Chargement des données fondamentales avec résolution de provenance des champs
     (priorisation de tables, inspection des tables contenant un champ, etc.).
     """
+
+    TABLE_PRIORITY_MAP = {          #Mapping des tables prioritaires, toujours les basic puis les advanced
+    "qf": [
+        'ff_v3.ff_basic_qf', 'ff_v3.ff_advanced_qf','ff_v3.ff_basic_der_qf', 'ff_v3.ff_advanced_der_qf'
+    ],
+    "af": [
+        'ff_v3.ff_basic_af', 'ff_v3.ff_advanced_af','ff_v3.ff_basic_der_af', 'ff_v3.ff_advanced_der_af'
+    ],
+    "ltm": [
+        'ff_v3.ff_basic_ltm', 'ff_v3.ff_advanced_ltm','ff_v3.ff_basic_der_ltm', 'ff_v3.ff_advanced_der_ltm'
+    ],
+    "ytd": [
+        'ff_v3.ff_basic_ytd', 'ff_v3.ff_advanced_ytd','ff_v3.ff_basic_der_ytd', 'ff_v3.ff_advanced_der_ytd'
+    ],
+    "saf": [
+        'ff_v3.ff_basic_af', 'ff_v3.ff_advanced_af','ff_v3.ff_basic_der_af', 'ff_v3.ff_advanced_der_af'
+    ],
+    }
+
     def __init__(
         self,
         conn,
-        schema: str = 'ff_v3',
-        table_priority: Optional[List[str]] = ['ff_v3.ff_basic_qf','ff_v3.ff_advanced_qf','ff_v3.ff_basic_der_qf','ff_v3.ff_advanced_der_qf','ff_v3.ff_basic_af','ff_v3.ff_advanced_af','ff_v3.ff_basic_der_af','ff_v3.ff_advanced_der_af'],
-        frequency: str = "Q"
+        schema: str = 'ff_v3'
     ):
         self.conn = conn
         self.schema = schema
         self.fundamental_tables = self._load_all_tables(schema)
-        self.table_priority = table_priority
         self._table_columns_cache: Dict[str, set[str]] = {}
-
 
     def _load_all_tables(self, schema: str) -> List[str]:
         """
@@ -69,7 +84,7 @@ class FundamentalDataLoader:
             """
 
         pdf = pd.read_sql(query, self.conn)
-        cols = set(pdf['column_name'].str.lower())
+        cols = set(col.lower() for col in pdf['column_name'] if isinstance(col, str))
         self._table_columns_cache[table] = cols
         return cols
 
@@ -88,29 +103,51 @@ class FundamentalDataLoader:
             mapping[field] = present_in
         return mapping
 
-    def _resolve_field_table_mapping(self, fields: List[str]) -> Dict[str, str]:
+    def _resolve_field_table_mapping(self, fields: List[str], frequency: str, fallback: bool) -> Dict[str, str]:
         """
         Pour chaque champ, choisit la table source selon la priorité.
-        Ignore les champs introuvables avec un warning.
+        Si fallback=False : on regarde uniquement dans les tables prioritaires.
+        Si fallback=True : on autorise n'importe quelle table si non trouvée en priorité.
         """
+        
+        table_priority = self.TABLE_PRIORITY_MAP.get(frequency.lower(), [])
         locations = self.field_locations(fields)
         resolved: Dict[str, str] = {}
 
         for field, tables in locations.items():
-            if not tables:
-                warnings.warn(
-                    f"Le champ '{field}' n'est trouve dans aucune des tables {self.fundamental_tables}. Il sera ignore."
-                )
-                continue
-            if len(tables) == 1:
-                resolved[field] = tables[0]
-            else:
-                for preferred in self.table_priority:
+            """if fallback:
+                for preferred in table_priority:
                     if preferred in tables:
                         resolved[field] = preferred
                         break
                 else:
-                    resolved[field] = tables[0]
+                    if tables:
+                        resolved[field] = tables[0]
+                    else:
+                        warnings.warn(
+                            f"Le champ '{field}' n'est trouve dans aucune table. Il sera rempli avec des valeurs NULL."
+                        )
+                        resolved[field] = None"""
+            if fallback:
+                for preferred in table_priority:
+                    if preferred in tables:
+                        resolved[field] = preferred
+                        break
+                else:
+                    if tables:
+                        resolved[field] = tables[0]
+                    else:
+                        resolved[field] = None
+
+            else:
+                filtered = [t for t in tables if t in table_priority]
+                if filtered:
+                    resolved[field] = filtered[0]
+                else:
+                    warnings.warn(
+                        f"Le champ '{field}' n'est pas trouve dans les tables prioritaires {table_priority}. Il sera ignore."
+                    )
+                    resolved[field] = None
 
         return resolved
 
@@ -120,6 +157,8 @@ class FundamentalDataLoader:
         start_date: str,
         end_date: str,
         fields: List[str],
+        frequency:str = "qf",
+        fallback:bool = False
     ) -> Dict[str, object]:
         """
         Récupère les fondamentaux : ne fait *pas* la jointure sur le calendrier,
@@ -128,13 +167,20 @@ class FundamentalDataLoader:
         if not fields:
             return {'dataframes': [], 'field_table_map': {}}
 
-        resolved = self._resolve_field_table_mapping(fields)
+        resolved = self._resolve_field_table_mapping(fields,frequency,fallback)
+
         table_to_fields: Dict[str, List[str]] = {}
+        missing_fields: List[str] = []
+
         for field, table in resolved.items():
-            table_to_fields.setdefault(table, []).append(field)
+            if table:
+                table_to_fields.setdefault(table, []).append(field)
+            else:
+                missing_fields.append(field)
 
         dfs: List[pl.DataFrame] = []
         isin_list = ','.join(f"'{i}'" for i in isins)
+
         for table, fields_in_table in table_to_fields.items():
             cols = ', '.join(fields_in_table)
             query = f"""
@@ -148,6 +194,16 @@ class FundamentalDataLoader:
             pdf = pd.read_sql(query, self.conn)
             if pdf.empty:
                 continue
-            dfs.append(pl.from_pandas(pdf))
+            df = pl.from_pandas(pdf)
+            dfs.append(df)
+
+        if missing_fields:
+            if dfs:
+                for i in range(len(dfs)):
+                    for mf in missing_fields:
+                        dfs[i] = dfs[i].with_columns(pl.lit(None).alias(mf))
+            else:
+                df_empty = pl.DataFrame({mf: [None] for mf in missing_fields})
+                dfs.append(df_empty)
 
         return {'dataframes': dfs, 'field_table_map': resolved}
