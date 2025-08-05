@@ -9,7 +9,7 @@ class FundamentalDataLoader:
     (priorisation de tables, inspection des tables contenant un champ, etc.).
     """
 
-    TABLE_PRIORITY_MAP = {          #Mapping des tables prioritaires, toujours les basic puis les advanced
+    TABLE_PRIORITY_MAP = {          #Mapping for all priority tables, always search in basic before advanced
     "qf": [
         'ff_v3.ff_basic_qf', 'ff_v3.ff_advanced_qf','ff_v3.ff_basic_der_qf', 'ff_v3.ff_advanced_der_qf'
     ],
@@ -161,8 +161,61 @@ class FundamentalDataLoader:
         fallback:bool = False
     ) -> Dict[str, object]:
         """
-        Récupère les fondamentaux : ne fait *pas* la jointure sur le calendrier,
-        il renvoie une liste de DataFrames (un par table source) et la map champ->table.
+        Retrieve raw fundamental data for a list of ISINs over a given time period and list of fields.
+
+        This method dynamically resolves which tables contain the requested fundamental fields 
+        based on the specified frequency (e.g. quarterly, annual). It fetches data from multiple 
+        tables (if needed), handling missing fields with optional fallback logic, and returns a 
+        list of DataFrames grouped by table source. The result is **not aligned on a calendar**.
+
+        Parameters
+        ----------
+        isins : List[str]
+            List of ISINs for which to retrieve data.
+
+        start_date : str
+            Start of the date range (inclusive), in 'YYYY-MM-DD' format.
+
+        end_date : str
+            End of the date range (inclusive), in 'YYYY-MM-DD' format.
+
+        fields : List[str]
+            List of fundamental fields to retrieve (e.g., ['ff_sales', 'ff_eps']).
+
+        frequency : str, default="qf"
+            Frequency tag used to prioritize table selection ('qf', 'af', 'cf', etc.).
+
+        fallback : bool, default=False
+            If True, fields not found in frequency-matching tables will be searched 
+            in all other available tables. If False, such fields are filled with nulls.
+
+        Returns
+        -------
+        Dict[str, object]
+            A dictionary with:
+            - "dataframes": List[pl.DataFrame], one per source table, each containing ISIN, date, and fields.
+            - "field_table_map": Dict[str, str or None], mapping each requested field to the table it came from 
+            (or None if not found).
+
+        Examples
+        --------
+        >>> result = fund_loader.get_fundamentals(
+        ...     isins=["US2910111044", "US2220702037"],
+        ...     start_date="2020-01-01",
+        ...     end_date="2022-12-31",
+        ...     fields=["ff_sales", "ff_eps", "ff_report_date"],
+        ...     frequency="af",
+        ...     fallback=True
+        ... )
+        
+        >>> result["dataframes"][0].head()
+        shape: (5, 5)
+        ┌────────────┬────────────┬──────────┬─────────┬────────────────┐
+        │ ISIN       │ date       │ ff_sales │ ff_eps  │ ff_report_date │
+        └────────────┴────────────┴──────────┴─────────┴────────────────┘
+
+        >>> result["field_table_map"]
+        {'ff_sales': 'ff_v3.ff_basic_af', 'ff_eps': 'ff_v3.ff_basic_af', 'ff_report_date': 'ff_v3.ff_basic_af'}
         """
         if not fields:
             return {'dataframes': [], 'field_table_map': {}}

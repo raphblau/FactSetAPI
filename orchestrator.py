@@ -28,34 +28,46 @@ class DataOrchestrator:
         frequency: str ="qf",
         fallback: bool = False
     ) -> dict[str, pl.DataFrame]:
+        # Load price data if price_fields are specified
         df_price = (
             self.prices_loader.get_prices(isins, start, end, price_fields, adjust)
             if price_fields
-            else pl.DataFrame([])
+            else pl.DataFrame([])   # Return empty DataFrame if no price fields provided
         )
 
         if fund_fields:
+            # Retrieve fundamental data as a list of DataFrames per ISIN or entity
             result = self.fund_loader.get_fundamentals(isins, start, end, fund_fields, frequency, fallback)
             df_fund_list = result['dataframes']
             if df_fund_list:
 
+                # Align all fundamental data on a unified calendar using metadata joiner
                 df_fund_all = self.meta.join_on_calendar(df_fund_list)
+                
+                # Remove redundant or duplicate date columns except 'ref_date'
                 drop_candidates = [c for c in df_fund_all.columns if c.lower().startswith("date") and c != "ref_date"]
                 df_fund_all = df_fund_all.drop(drop_candidates)
+
+                # Rename 'ref_date' to 'date' for consistency
                 df_fund_all = df_fund_all.with_columns(pl.col("ref_date").alias("date")).drop("ref_date")
+
+                # Filter rows to keep only those within the specified date range and non-null ISIN
                 df_fund_all = df_fund_all.filter(
                     pl.col("date").is_between(pl.lit(start).cast(pl.Date), pl.lit(end).cast(pl.Date))
                 ).drop_nulls("ISIN")
+
+                # Reorder and select only relevant columns in the final output
                 ordered_fields = [f for f in fund_fields if f in df_fund_all.columns]
                 final_cols = ['date', 'ISIN'] + ordered_fields
                 df_fund_all = df_fund_all.select([c for c in final_cols if c in df_fund_all.columns])
             else:
-                df_fund_all = pl.DataFrame([])
+                df_fund_all = pl.DataFrame([])  # Return empty if no dataframes were returned
         else:
-            df_fund_all = pl.DataFrame([])
+            df_fund_all = pl.DataFrame([])  # Return empty if no fundamental fields requested
 
         df_price_all = df_price.rename({"price_date":"date"})
 
+        # Return both datasets as a dictionary
         return {"prices": df_price_all, "fundamentals": df_fund_all}
 
     def __repr__(self):
