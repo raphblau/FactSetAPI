@@ -17,30 +17,7 @@ class DataOrchestrator:
         self.meta = MetaDataJoiner(conn)
         self.prices_loader = PriceDataLoader(conn)
         self.fund_loader = FundamentalDataLoader(conn)
-        self.estiates_loader = EstimatesLoader(conn)
-
-    def load_estimates(
-        self,
-        tables: list[str],
-        fe_items: list[str],
-        start: str,
-        end: str,
-        frequency: str = "qf"
-    ) -> dict[str, pl.DataFrame]:
-
-        result = {}
-
-        for table_type in tables:
-            df = self.estimates_loader.load(
-                table_type=table_type,
-                fe_items=fe_items,
-                start=start,
-                end=end,
-                frequency=frequency
-            )
-            result[table_type] = df
-
-        return result
+        self.estimates_loader = EstimatesLoader(conn)
 
     def load(
         self,
@@ -51,7 +28,10 @@ class DataOrchestrator:
         fund_fields: list[str] = None,
         adjust: bool = True,
         frequency: str ="qf",
-        fallback: bool = False
+        fallback: bool = False,
+        est_items: list[str] = None,
+        est_tables: list[str] = None,
+        est_frequency: str = None
     ) -> dict[str, pl.DataFrame]:
         # Load price data if price_fields are specified
         df_price = (
@@ -92,8 +72,17 @@ class DataOrchestrator:
 
         df_price_all = df_price.rename({"price_date":"date"})
 
+        estimates_result={}
+        if est_tables and est_items:
+            est_freq = est_frequency or frequency
+            for table_type in est_tables:
+                df = self.estimates_loader.get_estimates(table_type=table_type,isins=isins,fe_items=est_items,start=start,end=end,frequency=est_freq)
+                estimates_result[table_type] = df
+        else:
+            estimates_result = {}
+
         # Return both datasets as a dictionary
-        return {"prices": df_price_all, "fundamentals": df_fund_all}
+        return {"prices": df_price_all, "fundamentals": df_fund_all, "estimates": estimates_result}
 
     def __repr__(self):
         return f"<DataOrchestrator with tables: prices={self.prices_loader.TABLE}, fund={self.fund_loader.fundamental_tables}>"

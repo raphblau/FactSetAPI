@@ -6,6 +6,7 @@ class SharedUtils:
     def __init__(self, conn):
         self.conn = conn
 
+    @staticmethod
     def get_isin_map(isins: list[str], conn) -> pd.DataFrame:
         isin_list = "', '".join(isins)
         query = f"""
