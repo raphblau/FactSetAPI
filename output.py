@@ -39,7 +39,8 @@ class PanelOutput:
         self,
         isins: Optional[Union[str, List[str]]] = None,
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        fe_items: Optional[Union[str, List[str]]] = None
     ) -> 'PanelOutput':
         """
         Filter all contained DataFrames by ISIN and/or date range.
@@ -52,6 +53,8 @@ class PanelOutput:
             Minimum date (inclusive) in 'YYYY-MM-DD' format.
         end_date : str, optional
             Maximum date (inclusive) in 'YYYY-MM-DD' format.
+        fe_items : str or list[str], optional
+            One or more estimate item codes to filter on (e.g. "EPS", "BPS").
 
         Returns
         -------
@@ -73,13 +76,16 @@ class PanelOutput:
                 filtered = filtered.filter(pl.col("date") >= start_date)
             if end_date is not None:
                 filtered = filtered.filter(pl.col("date") <= end_date)
+            if fe_items is not None and "fe_item" in filtered.columns:
+                fe_items = [fe_items] if isinstance(fe_items, str) else fe_items
+                filtered = filtered.filter(pl.col("fe_item").is_in(fe_items))
             new_frames[key] = filtered
         return PanelOutput(new_frames)
 
     def to_matrix(
         self,
         source: str,
-        feature: str,
+        field: str,
         index: str = "date",
         entity: str = "ISIN"
     ) -> pl.DataFrame:
@@ -90,7 +96,7 @@ class PanelOutput:
         ----------
         source : str
             The key of the DataFrame to use (e.g., 'prices').
-        feature : str
+        field : str
             The name of the feature column to pivot.
         index : str, default="date"
             The column to use as row index (typically 'date').
@@ -105,13 +111,13 @@ class PanelOutput:
 
         Examples
         --------
-        >>> matrix = po.to_matrix(source="prices", feature="price")
+        >>> matrix = po.to_matrix(source="prices", field="price")
         >>> print(matrix.head())
         """
         df = self.get(source)
-        if df.is_empty() or feature not in df.columns:
+        if df.is_empty() or field not in df.columns:
             return pl.DataFrame()
-        return df.select([index, entity, feature]).pivot(index=index, columns=entity, values=feature)
+        return df.select([index, entity, field]).pivot(index=index, columns=entity, values=field, aggregate_function="first")
 
     def to_matrices(
         self,

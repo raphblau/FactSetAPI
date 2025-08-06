@@ -122,6 +122,12 @@ class FactsetAPI:
         frames = self.orchestrator.load(isins=isins,start=start,end=end,price_fields=price_fields,fund_fields=fund_fields,
                                         adjust=adjust,frequency=frequency,fallback=fallback,est_tables=est_tables,
                                         est_items=est_items,est_frequency=est_frequency)
+        
+        if "estimates" in frames and isinstance(frames["estimates"], dict):
+            estimates = frames.pop("estimates")
+            for k, v in estimates.items():
+                frames[f"estimates.{k}"] = v
+
         return PanelOutput(frames)
         #return frames
     
