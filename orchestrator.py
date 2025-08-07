@@ -22,8 +22,8 @@ class DataOrchestrator:
     def load(
         self,
         isins: list[str],
-        start: str,
-        end: str,
+        start_date: str,
+        end_date: str,
         price_fields: list[str] = None,
         fund_fields: list[str] = None,
         adjust: bool = True,
@@ -32,17 +32,18 @@ class DataOrchestrator:
         est_items: list[str] = None,
         est_tables: list[str] = None,
         est_frequency: str = None
+
     ) -> dict[str, pl.DataFrame]:
         # Load price data if price_fields are specified
         df_price = (
-            self.prices_loader.get_prices(isins, start, end, price_fields, adjust)
+            self.prices_loader.get_prices(isins, start_date, end_date, price_fields, adjust)
             if price_fields
             else pl.DataFrame([])   # Return empty DataFrame if no price fields provided
         )
 
         if fund_fields:
             # Retrieve fundamental data as a list of DataFrames per ISIN or entity
-            result = self.fund_loader.get_fundamentals(isins, start, end, fund_fields, frequency, fallback)
+            result = self.fund_loader.get_fundamentals(isins, start_date, end_date, fund_fields, frequency, fallback)
             df_fund_list = result['dataframes']
             if df_fund_list:
 
@@ -58,7 +59,7 @@ class DataOrchestrator:
 
                 # Filter rows to keep only those within the specified date range and non-null ISIN
                 df_fund_all = df_fund_all.filter(
-                    pl.col("date").is_between(pl.lit(start).cast(pl.Date), pl.lit(end).cast(pl.Date))
+                    pl.col("date").is_between(pl.lit(start_date).cast(pl.Date), pl.lit(end_date).cast(pl.Date))
                 ).drop_nulls("ISIN")
 
                 # Reorder and select only relevant columns in the final output

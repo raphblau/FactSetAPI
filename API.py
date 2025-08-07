@@ -1,25 +1,32 @@
 from core import create_connection
 from orchestrator import DataOrchestrator
-from fundamentals import FundamentalDataLoader
-from global_prices import PriceDataLoader
-from estimates import EstimatesLoader
 from metadata import MetaDataJoiner
 from output import PanelOutput
 import polars as pl
 import warnings
 warnings.filterwarnings("ignore", message=".*pandas only supports SQLAlchemy connectable.*")
 
+
+
 class FactsetAPI:
     def __init__(self):
         self.conn = create_connection()
         self.meta = MetaDataJoiner(self.conn)
-        self.prices = PriceDataLoader(self.conn)
-        self.fundamentals = FundamentalDataLoader(self.conn)
         self.orchestrator = DataOrchestrator(self.conn)
 
-    def load(self, isins: list[str], start: str = '1990-01-01', end: str ='2030-12-31',
-                 price_fields: list[str] = None, fund_fields: list[str] = None, adjust: bool = True, frequency: str = "qf", fallback: bool = False,
-                 est_tables: list[str] = None, est_items: list[str] = None, est_frequency: str = None) -> dict[str, pl.DataFrame]:
+    def load(self, 
+             isins: list[str], 
+             start_date: str = '1990-01-01', 
+             end_date: str ='2030-12-31',
+             price_fields: list[str] = None, 
+             fund_fields: list[str] = None, 
+             adjust: bool = True, 
+             frequency: str = "qf", 
+             fallback: bool = False,
+             est_tables: list[str] = None, 
+             est_items: list[str] = None, 
+             est_frequency: str = None
+             ) -> dict[str, pl.DataFrame]:
         """
         Load and merge price, fundamental, and estimate data for the specified ISINs and date range.
 
@@ -32,10 +39,10 @@ class FactsetAPI:
         isins : list[str]
             List of ISINs to retrieve data for.
 
-        start : str, default='1990-01-01'
+        start_date : str, default='1990-01-01'
             Start date (inclusive) in 'YYYY-MM-DD' format.
 
-        end : str, default='2030-12-31'
+        end_date : str, default='2030-12-31'
             End date (inclusive) in 'YYYY-MM-DD' format.
 
         price_fields : list[str], optional
@@ -81,8 +88,8 @@ class FactsetAPI:
         >>> api = FactsetAPI()
         >>> data = api.load(
         ...     isins=["US2910111044"],
-        ...     start="2021-01-01",
-        ...     end="2022-01-01",
+        ...     start_date="2021-01-01",
+        ...     end_date="2022-01-01",
         ...     price_fields=["close", "volume"]
         ... )
         >>> data.get("prices").head()
@@ -108,8 +115,8 @@ class FactsetAPI:
         Example 4: Load everything
         >>> data = api.load(
         ...     isins=["US03784Y2000"],
-        ...     start="2020-01-01",
-        ...     end="2023-01-01",
+        ...     start_date="2020-01-01",
+        ...     end_date="2023-01-01",
         ...     price_fields=["close"],
         ...     fund_fields=["ff_eps"],
         ...     est_tables=["conh"],
@@ -119,7 +126,7 @@ class FactsetAPI:
         >>> data.get("fundamentals").shape
         >>> data.get("estimates")["conh"].shape
         """
-        frames = self.orchestrator.load(isins=isins,start=start,end=end,price_fields=price_fields,fund_fields=fund_fields,
+        frames = self.orchestrator.load(isins=isins,start_date=start_date,end_date=end_date,price_fields=price_fields,fund_fields=fund_fields,
                                         adjust=adjust,frequency=frequency,fallback=fallback,est_tables=est_tables,
                                         est_items=est_items,est_frequency=est_frequency)
         
