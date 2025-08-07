@@ -77,7 +77,7 @@ class DataOrchestrator:
         if est_tables and est_items:
             est_freq = est_frequency or frequency
             for table_type in est_tables:
-                df = self.estimates_loader.get_estimates(table_type=table_type,isins=isins,fe_items=est_items,start=start,end=end,frequency=est_freq)
+                df = self.estimates_loader.get_estimates(table_type=table_type,isins=isins,fe_items=est_items,start_date=start_date,end_date=end_date,frequency=est_freq)
                 estimates_result[table_type] = df
         else:
             estimates_result = {}
