@@ -14,25 +14,26 @@ class FactsetAPI:
         self.meta = MetaDataJoiner(self.conn)
         self.orchestrator = DataOrchestrator(self.conn)
 
-    def load(self, 
-             isins: list[str], 
-             start_date: str = '1990-01-01', 
-             end_date: str ='2030-12-31',
-             price_fields: list[str] = None, 
-             fund_fields: list[str] = None, 
-             adjust: bool = True, 
-             frequency: str = "qf", 
-             fallback: bool = False,
-             est_tables: list[str] = None, 
-             est_items: list[str] = None, 
-             est_frequency: str = None
-             ) -> dict[str, pl.DataFrame]:
+    def load_all(
+        self, 
+        isins: list[str], 
+        start_date: str = '1990-01-01', 
+        end_date: str = '2030-12-31',
+        price_fields: list[str] = None, 
+        fund_fields: list[str] = None, 
+        price_adjust: bool = True, 
+        frequency: str = "qf", 
+        fund_fallback: bool = False,
+        est_tables: list[str] = None, 
+        est_items: list[str] = None, 
+        est_frequency: str = None
+    ) -> dict[str, pl.DataFrame]:
         """
-        Load and merge price, fundamental, and estimate data for the specified ISINs and date range.
+        Load all available datasets (prices, fundamentals, estimates) for the specified ISINs and date range.
 
-        This method orchestrates the retrieval of price, fundamental, and estimate data, applies calendar alignment,
-        handles adjustment logic for price fields, fallback logic for fundamental resolution, and allows flexible
-        extraction of multiple estimate types (e.g. consensus, guidance, actuals).
+        This method loads and returns all data types supported by the API, with granular control over 
+        adjustment, frequency, fallback logic, and estimate configurations. It provides a unified 
+        interface for full data panel extraction.
 
         Parameters
         ----------
@@ -46,89 +47,74 @@ class FactsetAPI:
             End date (inclusive) in 'YYYY-MM-DD' format.
 
         price_fields : list[str], optional
-            List of fields to extract from the prices table (e.g. ['close', 'volume']).
-            If None, no price data is loaded.
+            List of price fields to retrieve (e.g. ['close', 'volume']).
+            If None, price data is not loaded.
 
         fund_fields : list[str], optional
-            List of fundamental fields to extract (e.g. ['ff_sales', 'ff_eps']).
-            If None, no fundamental data is loaded.
+            List of fundamental fields to retrieve (e.g. ['ff_sales', 'ff_eps']).
+            If None, fundamental data is not loaded.
 
-        adjust : bool, default=True
-            Whether to adjust price fields for splits/dividends.
+        price_adjust : bool, default=True
+            Whether to adjust price data for splits and dividends.
 
         frequency : str, default="qf"
-            Frequency used for fundamental data (e.g. 'qf', 'af').
+            Frequency used for both fundamental and estimate data (unless overridden for estimates).
 
-        fallback : bool, default=False
-            If True, allows fallback to other tables when fundamental fields are missing.
-            If False, missing fields are filled with nulls.
+        fund_fallback : bool, default=False
+            Whether to fallback to other fundamental sources if data is missing.
 
         est_tables : list[str], optional
-            List of estimate types to load, such as ["conh", "act", "guid"].
-            If None, no estimate data is loaded.
+            List of estimate table types (e.g. ['conh', 'act', 'guid']).
+            If None, estimates are not loaded.
 
         est_items : list[str], optional
-            List of estimate `fe_item` codes to extract (e.g. ["EPS", "BPS"]).
-            If None, no estimate data is loaded.
+            List of estimate item codes to extract (e.g. ['EPS', 'BPS']).
+            If None, estimates are not loaded.
 
         est_frequency : str, optional
-            Frequency used for estimates (e.g. 'qf', 'af'). If None, uses `frequency`.
+            Frequency for estimates (e.g. 'qf', 'af'). If None, uses `frequency`.
 
         Returns
         -------
         PanelOutput
             An object containing:
-            - prices: pl.DataFrame with adjusted or raw price data
-            - fundamentals: pl.DataFrame with cleaned and calendar-aligned fundamental data
-            - estimates: dict[str, pl.DataFrame] (one dataframe per estimate type)
+            - prices: pl.DataFrame with price data (or empty if not loaded)
+            - fundamentals: pl.DataFrame with aligned fundamental data (or empty if not loaded)
+            - estimates.{table}: pl.DataFrame for each estimate type requested (or none if not loaded)
 
         Examples
         --------
-        Example 1: Load prices only
         >>> api = FactsetAPI()
-        >>> data = api.load(
-        ...     isins=["US2910111044"],
-        ...     start_date="2021-01-01",
-        ...     end_date="2022-01-01",
-        ...     price_fields=["close", "volume"]
-        ... )
-        >>> data.get("prices").head()
-
-        Example 2: Load fundamentals only
-        >>> data = api.load(
-        ...     isins=["US92939U1060"],
-        ...     fund_fields=["ff_eps", "ff_sales"],
-        ...     frequency="af",
-        ...     fallback=True
-        ... )
-        >>> data.get("fundamentals").head()
-
-        Example 3: Load estimates (consensus + actuals)
-        >>> data = api.load(
+        >>> data = api.load_all(
         ...     isins=["US0378331005"],
-        ...     est_tables=["conh", "act"],
-        ...     est_items=["EPS", "BPS"],
-        ...     est_frequency="af"
-        ... )
-        >>> data.get("estimates")["conh"].head()
-
-        Example 4: Load everything
-        >>> data = api.load(
-        ...     isins=["US03784Y2000"],
         ...     start_date="2020-01-01",
         ...     end_date="2023-01-01",
-        ...     price_fields=["close"],
-        ...     fund_fields=["ff_eps"],
-        ...     est_tables=["conh"],
+        ...     price_fields=["close", "volume"],
+        ...     fund_fields=["ff_eps", "ff_sales"],
+        ...     price_adjust=True,
+        ...     fund_fallback=True,
+        ...     est_tables=["conh", "act"],
         ...     est_items=["EPS"],
         ...     est_frequency="af"
         ... )
-        >>> data.get("fundamentals").shape
-        >>> data.get("estimates")["conh"].shape
+        >>> data.get("prices").head()
+        >>> data.get("fundamentals").head()
+        >>> data.get("estimates.conh").head()
+        >>> data.get("estimates.act").shape
         """
-        frames = self.orchestrator.load(isins=isins,start_date=start_date,end_date=end_date,price_fields=price_fields,fund_fields=fund_fields,
-                                        adjust=adjust,frequency=frequency,fallback=fallback,est_tables=est_tables,
-                                        est_items=est_items,est_frequency=est_frequency)
+        frames = self.orchestrator.load_all(
+            isins=isins,
+            start_date=start_date,
+            end_date=end_date,
+            price_fields=price_fields,
+            fund_fields=fund_fields,
+            adjust=price_adjust,
+            frequency=frequency,
+            fallback=fund_fallback,
+            est_tables=est_tables,
+            est_items=est_items,
+            est_frequency=est_frequency
+        )
         
         if "estimates" in frames and isinstance(frames["estimates"], dict):
             estimates = frames.pop("estimates")
@@ -136,7 +122,39 @@ class FactsetAPI:
                 frames[f"estimates.{k}"] = v
 
         return PanelOutput(frames)
-        #return frames
+
+    def load_prices(
+        self,
+        isins: list[str],
+        fields: list[str],
+        start_date: str = '1990-01-01',
+        end_date: str = '2030-12-31',
+        adjust: bool = True
+    ) -> pl.DataFrame:
+        return self.orchestrator.load_prices(isins, start_date, end_date, fields, adjust)
+
+    def load_fundamentals(
+        self,
+        isins: list[str],
+        fields: list[str],
+        start_date: str= '1990-01-01',
+        end_date: str= '2030-12-31',
+        frequency: str = "qf",
+        fallback: bool = False
+    ) -> pl.DataFrame:
+        return self.orchestrator.load_fundamentals(isins, start_date, end_date, fields, frequency, fallback)
+
+    def load_estimates(
+        self,
+        isins: list[str],
+        tables: list[str],
+        items: list[str],
+        start_date: str= '1990-01-01',
+        end_date: str= '2030-12-31',
+        frequency: str = "qf"
+    ) -> dict[str, pl.DataFrame]:
+        return self.orchestrator.load_estimates(isins, start_date, end_date, items, tables, frequency)
+
     
     @property
     def list_tables(self) -> list[str]:

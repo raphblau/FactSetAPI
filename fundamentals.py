@@ -115,29 +115,17 @@ class FundamentalDataLoader:
         resolved: Dict[str, str] = {}
 
         for field, tables in locations.items():
-            """if fallback:
-                for preferred in table_priority:
-                    if preferred in tables:
-                        resolved[field] = preferred
-                        break
-                else:
-                    if tables:
-                        resolved[field] = tables[0]
-                    else:
-                        warnings.warn(
-                            f"Le champ '{field}' n'est trouve dans aucune table. Il sera rempli avec des valeurs NULL."
-                        )
-                        resolved[field] = None"""
+
             if fallback:
                 for preferred in table_priority:
                     if preferred in tables:
                         resolved[field] = preferred
                         break
-                else:
-                    if tables:
-                        resolved[field] = tables[0]
                     else:
-                        resolved[field] = None
+                        if tables:
+                            resolved[field] = tables[0]
+                        else:
+                            resolved[field] = None
 
             else:
                 filtered = [t for t in tables if t in table_priority]

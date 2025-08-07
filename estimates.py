@@ -7,7 +7,7 @@ class EstimatesLoader:
         self.conn = conn
 
     def get_estimates(
-        self, table_type: str, fe_items: list[str], isins: list[str], start: str, end: str, frequency: str = "qf"
+        self, table_type: str, fe_items: list[str], isins: list[str], start_date: str, end_date: str, frequency: str = "qf"
     ) -> pl.DataFrame:
 
         isin_df = SharedUtils.get_isin_map(isins, self.conn)
@@ -34,7 +34,7 @@ class EstimatesLoader:
             query = f"""
                 SELECT * FROM {table}
                 WHERE fe_item IN ({','.join(f"'{item}'" for item in missing_items)})
-                AND fe_fp_end BETWEEN '{start}' AND '{end}'
+                AND fe_fp_end BETWEEN '{start_date}' AND '{end_date}'
                 AND fsym_id IN ('{fsym_filter}')
             """
 
